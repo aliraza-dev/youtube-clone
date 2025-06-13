@@ -54,6 +54,8 @@ export const POST = async (request: Request) => {
         return new Response("No Upload id found", { status: 400 });
       }
 
+      console.log("Created");
+
       await db
         .update(videos)
         .set({
@@ -102,6 +104,8 @@ export const POST = async (request: Request) => {
         return new Response("Missing upload id", { status: 400 });
       }
 
+      console.log("Error");
+
       await db
         .update(videos)
         .set({
@@ -119,7 +123,32 @@ export const POST = async (request: Request) => {
         return new Response("Missing upload id", { status: 400 });
       }
 
+      console.log("Deleted");
+
       await db.delete(videos).where(eq(videos.muxUploadId, data.upload_id));
+      break;
+    }
+
+    case "video.asset.track.ready": {
+      const data = payload.data as VideoAssetTrackReadyWebhookEvent["data"] & {
+        asset_id: string;
+      };
+
+      const assetId = data.asset_id,
+        trackId = data.id,
+        status = data.status;
+
+      if (!assetId) {
+        return new Response("Missing upload id", { status: 400 });
+      }
+
+      await db
+        .update(videos)
+        .set({
+          muxTrackId: trackId,
+          muxTrackStatus: status,
+        })
+        .where(eq(videos.muxAssetId, assetId));
       break;
     }
   }
