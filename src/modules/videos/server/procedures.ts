@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "@/db";
 import { videos, videoUpdateSchema } from "@/db/schema";
@@ -7,6 +8,26 @@ import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
 
 export const videosRouter = createTRPCRouter({
+  remove: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id: userId } = ctx.user;
+
+      const [removedVideo] = await db
+        .delete(videos)
+        .where(and(eq(videos.id, input.id), eq(videos.userId, userId)))
+        .returning();
+
+      if (!removedVideo) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return removedVideo;
+    }),
   update: protectedProcedure
     .input(videoUpdateSchema)
     .mutation(async ({ ctx, input }) => {

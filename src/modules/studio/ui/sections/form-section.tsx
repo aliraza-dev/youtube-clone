@@ -1,11 +1,16 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "react-error-boundary";
-import { MoreVerticalIcon, TrashIcon } from "lucide-react";
+import {
+  CopyCheck,
+  CopyCheckIcon,
+  CopyIcon,
+  MoreVerticalIcon,
+  TrashIcon,
+} from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
 import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +21,6 @@ import {
   FormControl,
   FormField,
   FormLabel,
-  FormMessage,
   FormItem,
 } from "@/components/ui/form";
 
@@ -35,21 +39,67 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { videoUpdateSchema } from "@/db/schema";
+import { toast } from "sonner";
+import VideoPlayer from "@/modules/videos/ui/components/video-player";
+import Link from "next/link";
+import { snakeCaseToTile } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 interface Props {
   videoId: string;
 }
 
 function FormSectionSuspense({ videoId }: Props) {
+  const [isCopied, setIsCopied] = useState(false);
+  const router = useRouter();
+
+  const utils = trpc.useUtils();
   const [video] = trpc.studio.getOne.useSuspenseQuery({ id: videoId });
   const [categories] = trpc.caregories.getMany.useSuspenseQuery();
+
+  const update = trpc.videos.update.useMutation({
+    onSuccess: () => {
+      utils.studio.getMany.invalidate();
+
+      utils.studio.getOne.invalidate({ id: videoId });
+      toast.success("Updated successfully");
+    },
+    onError: () => {
+      toast.error("Something went wrong,");
+    },
+  });
+
+  const remove = trpc.videos.remove.useMutation({
+    onSuccess: () => {
+      utils.studio.getMany.invalidate();
+      router.push("/studio");
+      toast.success("Removed  ");
+    },
+    onError: () => {
+      toast.error("Something went wrong,");
+    },
+  });
 
   const form = useForm({
     resolver: zodResolver(videoUpdateSchema),
     defaultValues: video,
   });
 
-  const onSubmit = async (data: any) => {};
+  const onSubmit = async (data: any) => {
+    await update.mutateAsync(data);
+  };
+
+  const fullUrl = `${
+    process.env.VERCEL_URL || "http://localhost:3000"
+  }/videos/${videoId}`;
+
+  const onCopy = async () => {
+    await navigator.clipboard.writeText(fullUrl);
+
+    setIsCopied(true);
+
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   return (
     <Form {...form}>
@@ -63,7 +113,7 @@ function FormSectionSuspense({ videoId }: Props) {
           </div>
 
           <div className="flex items-center gap-x-2">
-            <Button type="submit" disabled={false}>
+            <Button type="submit" disabled={update.isPending}>
               Save
             </Button>
 
@@ -75,7 +125,9 @@ function FormSectionSuspense({ videoId }: Props) {
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => remove.mutate({ id: videoId })}
+                >
                   <TrashIcon className="size-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
@@ -142,6 +194,87 @@ function FormSectionSuspense({ videoId }: Props) {
                           {category.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="flex flex-col gap-y-8 lg:col-span-2">
+            <div className="flex flex-col gap-4 bg-[#f9f9f9] rounded-xl overflow-hidden h-fit ">
+              <div className="aspect-video overflow-hidden relative">
+                <VideoPlayer
+                  playbackId={video.muxPlaybackId}
+                  thumbnailUrl={video.thumbnailUrl}
+                />
+              </div>
+
+              <div className="p-4 flex flex-col gap-y-6">
+                <div className="flex justify-between items-center gap-x-2">
+                  <div className="flex flex-col gap-y-1">
+                    <p className="text-muted-foreground text-xs">Video linl</p>
+                    <div className="flex items-center gap-x-2">
+                      <Link href={`/videos/${video.id}`}>
+                        <p className="line-clamp-1 text-sm text-blue-500">
+                          {fullUrl}
+                        </p>
+                      </Link>
+                      <Button
+                        type="button"
+                        variant={"ghost"}
+                        size={"icon"}
+                        className="shrink-0"
+                        onClick={onCopy}
+                        disabled={isCopied}
+                      >
+                        {isCopied ? <CopyCheckIcon /> : <CopyIcon />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col gap-y-1">
+                    <p className="text-muted-foreground text-xs">VideoStatus</p>
+                    <p className="text-xs">
+                      {snakeCaseToTile(video.muxStatus || "Preparing")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col gap-y-1">
+                    <p className="text-muted-foreground text-xs">
+                      Track Status
+                    </p>
+                    <p className="text-xs">
+                      {snakeCaseToTile(video.muxTrackStatus || "No Audio")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="visibility"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Visibility</FormLabel>
+
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value ?? undefined}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a visibility" />
+                      </SelectTrigger>
+                    </FormControl>
+
+                    <SelectContent defaultValue={video.visibility}>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
                     </SelectContent>
                   </Select>
                 </FormItem>
