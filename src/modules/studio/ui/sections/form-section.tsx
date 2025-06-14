@@ -107,6 +107,17 @@ function FormSectionSuspense({ videoId }: Props) {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const generateThumbnail = trpc.videos.generateThumbnail.useMutation({
+    onSuccess: () => {
+      toast.success("Generating thumbnail", {
+        description: "Will take a few minutes",
+      });
+    },
+    onError: () => {
+      toast.error("Something went wrong, please try again");
+    },
+  });
+
   return (
     <>
       <ThumbnailUploadModal
@@ -217,7 +228,11 @@ function FormSectionSuspense({ videoId }: Props) {
                             >
                               <ImagePlusIcon className="size-4 mr-1" /> Change
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                generateThumbnail.mutate({ videoId: video.id })
+                              }
+                            >
                               <Sparkle className="size-4 mr-1" /> AI Generated
                             </DropdownMenuItem>
                             <DropdownMenuItem>

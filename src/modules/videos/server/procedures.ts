@@ -6,8 +6,27 @@ import { videos, videoUpdateSchema } from "@/db/schema";
 import { mux } from "@/lib/mux";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
+import { workflow } from "@/lib/workflow";
 
 export const videosRouter = createTRPCRouter({
+  generateThumbnail: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id: userId } = ctx.user;
+      const { videoId } = input;
+
+      const { workflowRunId } = await workflow.trigger({
+        url: `${process.env.UPSTASH_WORKFLOW_URL}/api/videos/workflow/title`,
+        workflowRunId: "generate-thumbnail",
+        body: { userId, videoId },
+      });
+
+      return workflowRunId;
+    }),
   remove: protectedProcedure
     .input(
       z.object({
